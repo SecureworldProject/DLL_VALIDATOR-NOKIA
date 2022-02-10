@@ -7,34 +7,70 @@
 #include <time.h>
 #define SIZE_OF_BUFF 500
 
-void cipherMenu() {
+DWORD getFileSize(uint64_t* file_size, HANDLE handle, WCHAR* file_path) {
+	BOOL opened = FALSE;
+	DWORD error_code = ERROR_SUCCESS;
 
-	char line[500] = { 0 };
-	int choice = 0;
-
-	printf("\n Select an option:\n");
-	printf("  1) Cipher (type key) \n");
-	printf("  2) Decipher (type key) \n");
-	printf("  0) Back to main menu \n");
-	if (fgets(line, sizeof(line), stdin)) {
-		if (1 == sscanf(line, "%d", &choice)) {
-			switch (choice) {
-			case 1:
-				printf("Ciphering...\n");
-				break;
-			case 2:
-				printf("Deciphering...\n");
-				break;
-			case 0:
-				printf("Main menu... \n");
-				break;
-			default:
-				printf("Invalid option, try again.\n");
-				break;
-			}
+	// Ensure handle is valid (reopen the file if necessary)
+	if (!handle || handle == INVALID_HANDLE_VALUE) {
+		PRINT("Invalid file handle\n");
+		handle = CreateFile(file_path, GENERIC_WRITE, FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+		if (handle == INVALID_HANDLE_VALUE) {
+			error_code = GetLastError();
+			PRINT("\tERROR creating handle to get file size (%d)\n", error_code);
+			return error_code;
 		}
+		opened = TRUE;
 	}
+
+	// Using GetFileSizeEx() and passing directly the file_size pointer.
+	// Maybe should check file_size > 0 (although that would mean that file_size > 8 EiB = 2^63 Bytes)
+	if (!GetFileSizeEx(handle, (PLARGE_INTEGER)file_size)) {
+		error_code = GetLastError();
+		PRINT("\tcan not get a file size error = %d\n", error_code);
+		if (opened)
+			CloseHandle(handle);
+		return error_code;
+	};
+	return error_code;
 }
+
+void size_test() {
+
+	HANDLE handle_ciphered;
+	HANDLE handle_deciphered;
+	DWORD error_code;
+
+	size_t file_size_ciphered = 0;
+	size_t file_size_deciphered = 0;
+
+	handle_ciphered = CreateFileA("el_quijote_cifrado.txt", GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+	handle_deciphered = CreateFileA("el_quijote_descifrado.txt", GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+
+	error_code = getFileSize(&file_size_ciphered, handle_ciphered, L"el_quijote_cifrado.txt");
+	if (error_code != ERROR_SUCCESS) {
+		printf("\nError obtaining file size\n");
+	}
+	printf("\nThe detected file size is %llu\n", file_size_ciphered);
+
+	error_code = getFileSize(&file_size_deciphered, handle_deciphered, L"el_quijote_descifrado.txt");
+	if (error_code != ERROR_SUCCESS) {
+		printf("\nError obtaining file size\n");
+	}
+	printf("\nThe detected file size is %llu\n", file_size_deciphered);
+}
+
+void byte_test(DWORD b_size, char* msg, byte* cip_buf, byte* dec_buf) {
+	char caracter;
+	char caracter_ciphered;
+	char caracter_deciphered;
+
+	caracter = msg[100];
+	caracter_ciphered = cip_buf[100];
+	caracter_deciphered = dec_buf[100];
+
+	printf("En claro:%c\nCifrado:%c\nDescifrado:%c\n", caracter, caracter_ciphered, caracter_deciphered);
+	}
 
 void challengeMenu() {
 	char line[500] = { 0 };
@@ -60,37 +96,15 @@ void challengeMenu() {
 	}
 }
 
-BOOL validateDLL(char library[]) {
-
-	HINSTANCE hLib;
-	typedef void(__stdcall* funcion_importada)(); //__stdcall que sirve para llamadas a funciones y se usa en Windows para llamar a funciones de la API deWin32
-	funcion_importada funcion_dll; //funcion_importada es el tipo de la variable funcion_dll
-
-	hLib = LoadLibraryA(library);
-	if (hLib != NULL) {
-		printf("DLL loaded. \n");
-		funcion_dll = (funcion_importada)GetProcAddress(hLib, "saludar");
-		funcion_dll();
-		FreeLibrary(hLib);
-	}
-	else {
-		printf("DLL not loaded \n");
-	}
-	
-	return (hLib != NULL);
-
-}
-
-void validateCipher() {
+void main() {
 
 	printf("\n\n\n");
 	printf("  _______________________  \n");
 	printf(" |                       | \n");
-	printf(" |     CIPHER  MENU      | \n");
+	printf(" |     DLL VALIDATOR     | \n");
 	printf(" |_______________________| \n");
 	printf("\n");
 
-	BOOL func_menu = FALSE;
 	BOOL ciph_menu = FALSE;
 	BOOL main_menu = FALSE;
 
@@ -98,15 +112,23 @@ void validateCipher() {
 	char dll[SIZE_OF_BUFF] = { 0 };
 	int result;
 	size_t tam;
+	size_t tam_test;
 
 	HINSTANCE hLib;
 
-	typedef int(__stdcall* init_func_type)(struct Cipher*);
-	init_func_type init_func;
-
+	typedef int(__stdcall* cipher_init_func_type)(struct Cipher*);
+	cipher_init_func_type cipher_init_func;
 	typedef int(__stdcall* cipher_func_type)(LPVOID,LPCVOID,DWORD,size_t,struct KeyData*);
 	cipher_func_type cipher_func;
 	cipher_func_type decipher_func;
+
+	typedef int(__stdcall* ch_init_func_type)(struct ChallengeEquivalenceGroup*, struct Challenge*);
+	ch_init_func_type ch_init_func;
+	typedef int(__stdcall* execute_func_type)();
+	execute_func_type execute_func;
+
+	void byte_test();
+
 	
 	//Creamos KeyData y puntero a Keydata
 	unsigned char arr1[] = { 10, 20, 30, 40, 50 };
@@ -117,9 +139,6 @@ void validateCipher() {
 	composed_key->data = malloc(composed_key->size, sizeof(byte));
 	composed_key->expires = 0;
 	
-
-	//ptr_composed_key = &composed_key;
-
 	//Creamos estructura Cipher y puntero a Cipher
 	struct Cipher* ptr_cipher,cipher;
 
@@ -133,8 +152,10 @@ void validateCipher() {
 			hLib = LoadLibraryW(dll);
 			if (hLib != NULL) {
 				printf("DLL loaded. \n");
-				//Comprobar si en la DLL existe una función cipher
+				//Comprobar si en la DLL existe una función cipher o execute
 				cipher_func = (cipher_func_type)GetProcAddress(hLib, "cipher");
+				execute_func = (execute_func_type)GetProcAddress(hLib, "executeChallenge");
+
 				//Si existe, es una DLL de cipher
 				if (cipher_func != NULL) {
 					printf("%ws is a cipher DLL. \n",dll);
@@ -147,9 +168,9 @@ void validateCipher() {
 					ptr_cipher = &cipher;
 					
 					//Llamar a funcion init cuando tenga todos los parametros de cipher
-					init_func = (init_func_type)GetProcAddress(hLib, "init");
-					if (init_func != NULL) {
-						int result = init_func(ptr_cipher); //pasamos puntero a cipher
+					cipher_init_func = (cipher_init_func_type)GetProcAddress(hLib, "init");
+					if (cipher_init_func != NULL) {
+						int result = cipher_init_func(ptr_cipher); //pasamos puntero a cipher
 						if (result != 0) {
 							PRINT("WARNING: error \n");
 						}
@@ -160,10 +181,31 @@ void validateCipher() {
 
 					do {
 						char line[SIZE_OF_BUFF] = {0};
-						//char *file_cip;
 						int choice = 0;
+												
+						//Creamos buffer de origen
+						char* file = "el_quijote.txt";
+						FILE* f_original = NULL;
+						f_original = fopen(file, "r"); //suponiendo que la ruta de el fichero este en la misma ubicación que el .exe de la aplicación. Si no, pones la ruta tal cual.
+						char* message;
+						message = inputFile(f_original, 1);
+						tam = strlen(message);
+						fclose(f_original);
 
-						printf("\n Select an option:\n");
+						//Creamos buffers de destino
+						DWORD buf_size = tam;
+						size_t offset = 0;
+						byte* ciphered_buf = malloc(buf_size * sizeof(byte));
+						byte* deciphered_buf = malloc(buf_size * sizeof(byte));
+
+						//Buffers más pequeños para pruebas especificas
+						char* message_test = "Hola mundo";
+						tam_test = strlen(message_test);
+						DWORD buf_size_test = tam_test;
+						byte* ciphered_buf_test = malloc(buf_size_test * sizeof(byte));
+						byte* deciphered_buf_test = malloc(buf_size_test * sizeof(byte));
+
+						printf("\nSelect an option:\n");
 						printf("  1) Functionality test \n");
 						printf("  2) Robustness test \n");
 						printf("  3) Cipher/Decipher \n");
@@ -173,127 +215,77 @@ void validateCipher() {
 								switch (choice) {
 								case 1:
 									printf("FUNCTIONALTY TEST \n");
+									//Ciframos y desciframos el archivo original para poder realizar las pruebas.
+
+									//Llamada a funcion cipher
+									cipher_func = (cipher_init_func_type)GetProcAddress(hLib, "cipher");
+									if (cipher_func != NULL) {
+										//printf("\nTam quijote: %d\nTam buffer salida: %d\n", tam, _msize(ciphered_buf));
+										result = cipher_func(ciphered_buf_test, message_test, buf_size_test, offset, composed_key);
+										result = cipher_func(ciphered_buf, message, buf_size, offset, composed_key);
+										FILE* f_ciphered = NULL;
+										f_ciphered = fopen("el_quijote_cifrado.txt", "wb");
+										fwrite(ciphered_buf, 1, tam, f_ciphered);
+										fclose(f_ciphered);
+
+										//free(ciphered_buf);
+										if (result != 0) {
+											PRINT("WARNING: error \n");
+										}
+									}
+									else {
+										PRINT("WARNING: error accessing the address to the cipher() function of the cipher '%ws' (error: %d)\n", dll, GetLastError());
+									}
+									//Llamada a funcion decipher
+									decipher_func = (cipher_init_func_type)GetProcAddress(hLib, "decipher");
+									if (decipher_func != NULL) {
+										result = decipher_func(deciphered_buf_test, message_test, buf_size_test, offset, composed_key);
+										result = decipher_func(deciphered_buf, ciphered_buf, buf_size, offset, composed_key);
+										FILE* f_deciphered = NULL;
+										f_deciphered = fopen("el_quijote_descifrado.txt", "wb");
+										fwrite(deciphered_buf, 1, tam, f_deciphered);
+										fclose(f_deciphered);
+										if (result != 0) {
+											PRINT("WARNING: error \n");
+										}
+									}
+									else {
+										PRINT("WARNING: error accessing the address to the cipher() function of the cipher '%ws' (error: %d)\n", dll, GetLastError());
+									}
+
 									do {
-										printf("\n Select an option:\n");
+										printf("\nSelect test to run:\n");
 										printf("  1) Size \n");
 										printf("  2) Byte \n");
 										printf("  3) Cipher not Decipher \n");
 										printf("  4) Decipher is valid \n");
-										printf("  0) Back to main menu \n");
-										func_menu = FALSE;
-									} while (!func_menu);
-									break;
-								case 2:
-									printf("ROBUSTNESS TEST \n");
-									break;
-								case 3:
-									printf("CIPHER or DECIPHER\n");
-									//PEDIR ARCHIVO									
-									do {
-										/*printf("Enter file's path:");
-										//fgets(file, SIZE_OF_BUFF,stdin);
-										printf("Looking for the '.' character in \"%s\"...\n", file);
-										//file_cip = strchr(file, '.');
-										
-										while (file_cip != NULL)
-										{
-											printf("found at %d\n", file_cip - file + 1);
-											file_cip = strchr(file_cip + 1, '.');
-										}
-										char *match = '\0';
-										printf("Terminado \n");
-										char* resultado[20];
-										int fileExtPos = IndexOf(file, ".");
-										memcpy(resultado, &file[0],sizeof(file)-fileExtPos);
-										resultado[sizeof(resultado)+1] = '\0';
-										printf(resultado);
-
-										*/
-
-
-										//Buffer de tipo archivo (origen)
-										//byte* src_buf = ""; Usamos un archivo como buffer de entrada
-										char* file = "el_quijote.txt";
-										FILE* fp = NULL;
-										fp = fopen(file, "r"); //suponiendo que la ruta de el fichero este en la misma ubicación que el .exe de la aplicación. Si no, pones la ruta tal cual.
-										char* message;
-										message = inputFile(fp, 1);
-										tam = strlen(message);
-										
-										fclose(fp);
-
-										//Creamos buffers destino
-										DWORD buf_size = tam;
-										size_t offset = 0;
-										byte* dst_buf = malloc(buf_size * sizeof(byte));
-										byte* deciphered_buf = malloc(buf_size * sizeof(byte));
-
-										printf("\n Select an option:\n");
-										printf("  1) Cipher \n");
-										printf("  2) Decipher \n");
-										printf("  0) Back to main menu \n");
+										printf("  5) Run all tests \n");
+										printf("  0) Back to cipher menu \n");
 										if (fgets(line, sizeof(line), stdin)) {
 											if (1 == sscanf(line, "%d", &choice)) {
 												switch (choice) {
 												case 1:
-													//Llamada a funcion cipher
-													cipher_func = (init_func_type)GetProcAddress(hLib, "cipher");
-													if (cipher_func != NULL) {
-														printf("\nTam quijote: %d\nTam buffer salida: %d\n", tam,_msize(dst_buf));
-														result = cipher_func(dst_buf, message, buf_size, offset, composed_key); //argumentos - propiedades
-														printf("\nResult: %d\n", result);
-														FILE* fq = NULL;
-														fq = fopen("el_quijote_cifrado.txt", "w");
-														//fputs(dst_buf, fq);
-														fwrite(dst_buf, 1, tam, fq);
-														fclose(fq);
-
-														//free(dst_buf);
-														//printf("\n(%s)\n", dst_buf);
-														if (result != 0) {
-															PRINT("WARNING: error \n");
-														}
-													}
-													else {
-														PRINT("WARNING: error accessing the address to the cipher() function of the cipher '%ws' (error: %d)\n", dll, GetLastError());
-													}
-													decipher_func = (init_func_type)GetProcAddress(hLib, "decipher");
-													if (decipher_func != NULL) {
-														result = decipher_func(deciphered_buf, dst_buf, buf_size, offset, composed_key); //argumentos - propiedades
-														//printf("\n(%s)\n", dst_buf);
-														FILE* fr = NULL;
-														fr = fopen("el_quijote_descifrado.txt", "w");
-														//fputs(deciphered_buf, fr);
-														fwrite(deciphered_buf, 1, tam, fr);
-														fclose(fr);
-														if (result != 0) {
-															PRINT("WARNING: error \n");
-														}
-													}
-													else {
-														PRINT("WARNING: error accessing the address to the cipher() function of the cipher '%ws' (error: %d)\n", dll, GetLastError());
-													}
+													size_test();
 													break;
 												case 2:
-													decipher_func = (init_func_type)GetProcAddress(hLib, "decipher");
-													if (decipher_func != NULL) {
-														result = decipher_func(deciphered_buf,dst_buf, buf_size, offset, composed_key); //argumentos - propiedades
-														//printf("\n(%s)\n", dst_buf);
-														FILE* fr = NULL;
-														fr = fopen("el_quijote_descifrado.txt", "w");
-														//fputs(deciphered_buf, fr);
-														fwrite(deciphered_buf, 1, tam, fr);
-														fclose(fr);
-														if (result != 0) {
-															PRINT("WARNING: error \n");
-														}
-													}
-													else {
-														PRINT("WARNING: error accessing the address to the cipher() function of the cipher '%ws' (error: %d)\n", dll, GetLastError());
-													}
+													//Usar buffers y memcopy
+													byte_test(buf_size, message, ciphered_buf, deciphered_buf);
+													break;
+												case 3:
+													printf("Texto en claro:%s\n De claro a cifrado:%s\n De claro a descifrado:%s\n", message_test, ciphered_buf_test, deciphered_buf_test);
+													break;
+												case 4:
+													printf("Texto en claro:%s\n De claro a descifrado:%s\n", message_test, deciphered_buf_test);
+													break;
+												case 5:
+													printf("Running all tests...\n");
+													size_test();
+													byte_test(buf_size, message, ciphered_buf, deciphered_buf);
+													printf("Texto en claro:%s\n De claro a cifrado:%s\n De claro a descifrado:%s\n", message_test, ciphered_buf_test, deciphered_buf_test);
+													printf("Texto en claro:%s\n De claro a descifrado:%s\n", message_test, deciphered_buf_test);
 													break;
 												case 0:
-													printf("Main menu... \n");
+													printf("Cipher menu... \n");
 													ciph_menu = TRUE;
 													break;
 												default:
@@ -302,9 +294,47 @@ void validateCipher() {
 												}
 											}
 										}
-
+										
 									} while (!ciph_menu);
-
+									break;
+								case 2:
+									printf("ROBUSTNESS TEST \n");
+									break;
+								case 3:
+									printf("CIPHER AND DECIPHER\n");
+									//Llamada a funcion cipher
+									cipher_func = (cipher_init_func_type)GetProcAddress(hLib, "cipher");
+									if (cipher_func != NULL) {
+										printf("Tam quijote: %d\nTam quijote_cifrado: %d\n", tam, _msize(ciphered_buf));
+										result = cipher_func(ciphered_buf, message, buf_size, offset, composed_key); //argumentos - propiedades
+										FILE* f_ciphered = NULL;
+										f_ciphered = fopen("el_quijote_cifrado.txt", "wb");
+										fwrite(ciphered_buf, 1, tam, f_ciphered);
+										fclose(f_ciphered);
+										//free(ciphered_buf);
+										if (result != 0) {
+											PRINT("WARNING: error \n");
+										}
+									}
+									else {
+										PRINT("WARNING: error accessing the address to the cipher() function of the cipher '%ws' (error: %d)\n", dll, GetLastError());
+									}
+									//Llamada a funcion decipher
+									decipher_func = (cipher_init_func_type)GetProcAddress(hLib, "decipher");
+									if (decipher_func != NULL) {
+										printf("Tam quijote_cifrado: %d\nTam quijote_descifrado: %d\n", _msize(ciphered_buf), _msize(deciphered_buf));
+										result = decipher_func(deciphered_buf, ciphered_buf, buf_size, offset, composed_key); //argumentos - propiedades
+										FILE* f_deciphered = NULL;
+										f_deciphered = fopen("el_quijote_descifrado.txt", "wb");
+										fwrite(deciphered_buf, 1, tam, f_deciphered);
+										fclose(f_deciphered);
+										if (result != 0) {
+											PRINT("WARNING: error \n");
+										}
+									}
+									else {
+										PRINT("WARNING: error accessing the address to the cipher() function of the cipher '%ws' (error: %d)\n", dll, GetLastError());
+									}
 									break;
 								case 0:
 									printf("Main menu... \n");
@@ -320,8 +350,9 @@ void validateCipher() {
 					} while (!main_menu);
 
 				}
-				else {
-					printf("%s is not a cipher DLL. \n",dll);
+				else if (execute_func != NULL ) {
+					printf("%ws is a challenge DLL. \n",dll);
+					//PRUEBAS CHALLENGE
 				}
 			}				
 			else {
@@ -344,7 +375,7 @@ void validateChallenge() {
 	int result;
 
 	/*
-	LPVOID dst_buf = NULL;
+	LPVOID ciphered_buf = NULL;
 	LPVOID src_buf = "Probando buffers";
 	DWORD buf_size = 512;
 	*/
@@ -420,69 +451,6 @@ void validateChallenge() {
 	
 }
 
-void main() {
-
-	//////////////////////////////////////////
-	LPVOID src_buf = "Probando buffers";
-	LPVOID dst_buf = NULL;
-	//char* test = "Probando buffers";
-	/////////////////////////////////////////
-
-	char line[150] = { 0 };
-	int choice = 0;
-	char dll[150] = { 0 };
-	BOOL quit_menu = FALSE;
-	//HINSTANCE hLib;
-			
-	do {
-
-		printf("\n\n\n");
-		printf("  _______________________  \n");
-		printf(" |                       | \n");
-		printf(" |     VALIDATOR  MENU   | \n");
-		printf(" |_______________________| \n");
-		printf("\n");
-
-		printf("\n");
-		printf("Select an option:\n");
-		printf("  1) Validate dll \n");
-		printf("  2) Validate cipher \n");
-		printf("  3) Validate challenge \n");
-		printf("  0) Exit\n");
-		if (fgets(line, sizeof(line), stdin)) { //reads a line from the specified stream and stores it into line. stdin = keyboard
-			if (1 == sscanf(line, "%d", &choice)) { //sscanf returns the number of variables filled (1 in this case)
-				switch (choice) {
-				case 1:
-					printf("Introduce DLL name:\n");
-					if (fgets(line, sizeof(line), stdin)) {
-						if (1 == sscanf(line, "%s", dll)) {
-							validateDLL(dll);
-							//dst_buf = src_buf;
-							//printf(dst_buf);
-						}
-					}
-					break;
-				case 2:
-					validateCipher();								
-					break;
-				case 3:
-					printf("Case 3. \n");
-					//memcpy(buf, &test, strlen(test) + 1);
-					//printf("%s", &buf);
-					break;
-				case 0:
-					printf("Exitting...\n");
-					quit_menu = TRUE;
-					break;
-				default:
-					printf("Invalid option, try again.\n");
-					break;
-				}
-			}
-		}
-	} while (!quit_menu);
-}
-
 /*void menu() {
 
 	do {
@@ -508,8 +476,8 @@ void main() {
 					if (fgets(line, sizeof(line), stdin)) {
 						if (1 == sscanf(line, "%s", dll)) {
 							validateDLL(dll);
-							//dst_buf = src_buf;
-							//printf(dst_buf);
+							//ciphered_buf = src_buf;
+							//printf(ciphered_buf);
 						}
 					}
 					break;

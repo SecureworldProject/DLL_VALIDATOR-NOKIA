@@ -72,30 +72,6 @@ void byte_test(DWORD b_size, char* msg, byte* cip_buf, byte* dec_buf) {
 	printf("Clear:%c\nCiphered:%c\nDeciphered:%c\n", caracter, caracter_ciphered, caracter_deciphered);
 	}
 
-void challengeMenu() {
-	char line[500] = { 0 };
-	int choice = 0;
-
-	printf("\n Select an option:\n");
-	printf("  1) Run challenge \n");
-	printf("  0) Back to main menu \n");
-	if (fgets(line, sizeof(line), stdin)) {
-		if (1 == sscanf(line, "%d", &choice)) {
-			switch (choice) {
-			case 1:
-				printf("Running...\n");
-				break;
-			case 0:
-				printf("Main menu... \n");
-				break;
-			default:
-				printf("Invalid option, try again.\n");
-				break;
-			}
-		}
-	}
-}
-
 void main() {
 
 	BOOL ciph_menu = FALSE;

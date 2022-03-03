@@ -217,7 +217,7 @@ extern "C" {
 	struct Challenge {
 		WCHAR* file_name;
 		HINSTANCE lib_handle;
-		char* properties;		// String of properties as in a HTML query: "prop1=valor&prop2=valor..."
+		char* properties;		// String of properties as in a JSON query: "prop1=valor&prop2=valor..."
 	};
 
 	struct Cipher {

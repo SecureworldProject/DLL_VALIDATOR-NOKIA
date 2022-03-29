@@ -80,24 +80,6 @@ void byte_test(DWORD b_size, char* msg, byte* cip_buf, byte* dec_buf) {
 	printf("Clear:%c\nCiphered:%c\nDeciphered:%c\n", caracter, caracter_ciphered, caracter_deciphered);
 	}
 
-/*void cipher_f(char s[], HINSTANCE h, byte* buffer, char* msg, size_t offset, struct KeyData* key) {
-	typedef int(__stdcall* cipher_func_type)(LPVOID, LPCVOID, DWORD, size_t, struct KeyData*);
-	cipher_func_type cipher_func;
-	size_t tam = strlen(msg);
-	DWORD buffer_size = tam;
-
-	cipher_func = (cipher_func_type)GetProcAddress(h, s);
-	if (cipher_func != NULL) {
-		int result = cipher_func(buffer, msg, buffer_size, offset, key);
-		if (result != 0) {
-			PRINT("WARNING: error \n");
-		}
-	}
-	else {
-		PRINT("WARNING: error accessing the address to the cipher() function of the cipher. (error: %d)\n", GetLastError());
-	}
-}*/
-
 
 void main() {
 
@@ -123,15 +105,15 @@ void main() {
 	typedef int(__stdcall* execute_func_type)();
 	execute_func_type execute_func;
 	
-	//Creation of composed key (and pointer)
-	struct KeyData *composed_key;
-	
 	//Creation of cipher struct (and pointer)
 	struct Cipher* ptr_cipher,cipher;
+	//Creation of composed key
+	struct KeyData* composed_key;
 
 	//Creation of challenge struct (amd pointer)
 	struct Challenge* ptr_challenge, challenge;
-
+	//Creation of subkey
+	struct KeyData* subkey;
 	//Creation of challenge equivalence group struct (amd pointer)
 	struct ChallengeEquivalenceGroup* ptr_challenge_eq, challenge_eq;
 
@@ -144,10 +126,14 @@ void main() {
 		printf(" |_______________________| \n");
 		printf("\n");
 		//Request DLL file input
-		printf("Introduce DLL name:\n");
-		if (fgetws(line, sizeof(line), stdin)) { //line is wchar_t
-			if (1 == swscanf(line, L"%ls", dll)) {  //Format of stdin
-
+		printf("Introduce DLL name (0 to exit):\n");
+		fgetws(line, sizeof(line), stdin);
+		if (wcscmp(line, L"0\n") == 0) {
+			printf("Good bye!\n");
+			break;
+		}
+		//else if (fgetws(line, sizeof(line), stdin)) { //line is wchar_t
+		else if (1 == swscanf(line, L"%ls", dll)) {  //Format of stdin
 			//Check DLL file and load if possible
 				hLib = LoadLibraryW(dll); //LoadLibraryW/A?
 				if (hLib != NULL) {
@@ -168,6 +154,7 @@ void main() {
 						composed_key = malloc(1 * sizeof(struct KeyData));
 						composed_key->size = 5;
 						composed_key->data = malloc(composed_key->size, sizeof(byte));
+						composed_key->data = (byte*)"12345";
 						composed_key->expires = 0;
 
 						//Init function call from the DLL
@@ -212,6 +199,44 @@ void main() {
 						DWORD buf_size_test = tam_test;
 						byte* ciphered_buf_test = malloc(buf_size_test * sizeof(byte));
 						byte* deciphered_buf_test = malloc(buf_size_test * sizeof(byte));
+
+						//Cipher and decipher source buffers for testing
+						
+						//Ciphering
+						cipher_func = (cipher_func_type)GetProcAddress(hLib, "cipher");
+						if (cipher_func != NULL) {
+							//Smaller buffer (original -> cipher)
+							result = cipher_func(ciphered_buf_test, message_test, buf_size_test, offset, composed_key);
+							//Original buffer (original -> cipher)
+							result = cipher_func(ciphered_buf, message, buf_size, offset, composed_key);
+							f_ciphered = fopen(file_ciphered, "wb");
+							fwrite(ciphered_buf, 1, tam, f_ciphered);
+							//fclose(f_ciphered);
+							printf("%d\n", result);
+							if (result != 0) {
+								PRINT("WARNING: error of the cipher '%ws' (error: %d)\n", dll, GetLastError()); ///*** Especificar error si es posible
+							}
+						}
+						else {
+							PRINT("WARNING: error accessing the address to the cipher() function of the cipher '%ws' (error: %d)\n", dll, GetLastError());
+						}
+						//Deciphering
+						decipher_func = (cipher_func_type)GetProcAddress(hLib, "decipher");
+						if (decipher_func != NULL) {
+							//Smaller buffer (original -> decipher)
+							result = decipher_func(deciphered_buf_test, message_test, buf_size_test, offset, composed_key);
+							//Original buffer (cipher -> decipher)
+							result = decipher_func(deciphered_buf, ciphered_buf, buf_size, offset, composed_key);
+							f_deciphered = fopen(file_deciphered, "wb");
+							fwrite(deciphered_buf, 1, tam, f_deciphered);
+							//fclose(f_deciphered);
+							if (result != 0) {
+								PRINT("WARNING: error \n");
+							}
+						}
+						else {
+							PRINT("WARNING: error accessing the address to the cipher() function of the cipher '%s' (error: %d)\n", dll, GetLastError());
+						}
 							
 						do {
 							printf("\n\n");
@@ -230,43 +255,7 @@ void main() {
 								if (1 == sscanf(line, "%d", &choice)) {
 									switch (choice) {
 									case 1:
-										//Cipher and decipher source buffer for testing
-										//Ciphering...
-										
-										cipher_func = (cipher_init_func_type)GetProcAddress(hLib, "cipher");
-										if (cipher_func != NULL) {
-											//Smaller buffer (original -> cipher)
-											result = cipher_func(ciphered_buf_test, message_test, buf_size_test, offset, composed_key);
-											//Original buffer (original -> cipher)
-											result = cipher_func(ciphered_buf, message, buf_size, offset, composed_key);
-											f_ciphered = fopen(file_ciphered, "wb");
-											fwrite(ciphered_buf, 1, tam, f_ciphered);
-											//fclose(f_ciphered);
-											if (result != 0) {
-												PRINT("WARNING: error \n");
-											}
-										}
-										else {
-											PRINT("WARNING: error accessing the address to the cipher() function of the cipher '%ws' (error: %d)\n", dll, GetLastError());
-										}
-										//Deciphering
-										decipher_func = (cipher_init_func_type)GetProcAddress(hLib, "decipher");
-										if (decipher_func != NULL) {
-											//Smaller buffer (original -> decipher)
-											result = decipher_func(deciphered_buf_test, message_test, buf_size_test, offset, composed_key);
-											//Original buffer (cipher -> decipher)
-											result = decipher_func(deciphered_buf, ciphered_buf, buf_size, offset, composed_key);
-											f_deciphered = fopen(file_deciphered, "wb");
-											fwrite(deciphered_buf, 1, tam, f_deciphered);
-											//fclose(f_deciphered);
-											if (result != 0) {
-												PRINT("WARNING: error \n");
-											}
-										}
-										else {
-											PRINT("WARNING: error accessing the address to the cipher() function of the cipher '%s' (error: %d)\n", dll, GetLastError());
-										}
-
+																														
 										do {
 											printf("\nSelect test to run:\n");
 											printf("  1) Size \n");
@@ -283,9 +272,11 @@ void main() {
 														break;
 													case 2:
 														//USE BUFFERS AND MEMCOPY (?)
+														//Mostrar 10 bytes random
 														byte_test(buf_size, message, ciphered_buf, deciphered_buf);														
 														break;
 													case 3:
+														//PRINT_HEX (ciphered_buf_test,tam)
 														printf("Clear text:%s\nFrom clear to ciphered:%s\nFrom clear to deciphered:%s\n", message_test, ciphered_buf_test, deciphered_buf_test);
 														break;
 													case 4:
@@ -367,14 +358,17 @@ void main() {
 						printf("%ws is a challenge DLL. \n", dll);
 						challenge.file_name = dll;
 						challenge.lib_handle = hLib;
-						challenge.properties = "Cadena de caracteres con las propiedades formato JSON.";
+						challenge.properties = ""; //Cadena de caracteres con las propiedades formato JSON.
 						ptr_challenge = &challenge;
 
-						composed_key = malloc(1 * sizeof(struct KeyData));
-						composed_key->size = 0;
-						composed_key->data = NULL;
-						composed_key->expires = 0;
+						//composed_key cambiar por subkey
+						subkey = malloc(1 * sizeof(struct KeyData));
+						subkey->size = 0;
+						subkey->data = NULL;
+						subkey->expires = 0;
 						//CHALLENGE TEST
+
+
 					}
 				}
 				else {
@@ -382,7 +376,5 @@ void main() {
 				}
 				FreeLibrary(hLib);
 			}
-		}
-
-	} while (TRUE);	
+		} while (TRUE);	
 }

@@ -14,6 +14,7 @@ Nokia Febrero 2021
 #include <stdio.h>
 #include <stdlib.h>
 #include "windows.h"
+#include "json.h"
 #include <stdint.h>
 
 
@@ -159,6 +160,7 @@ extern "C" {
 		byte* data;
 		int size;
 		time_t expires;		// In the case of the full key we will take the first expire date
+		CRITICAL_SECTION critical_section;
 	};
 
 	struct Pendrive {
@@ -217,7 +219,7 @@ extern "C" {
 	struct Challenge {
 		WCHAR* file_name;
 		HINSTANCE lib_handle;
-		char* properties;		// String of properties as in a JSON query: "prop1=valor&prop2=valor..."
+		json_value* properties;		// Json_value of properties
 	};
 
 	struct Cipher {

@@ -230,6 +230,8 @@ typedef int(__stdcall* ch_init_func_type)(struct ChallengeEquivalenceGroup*, str
 ch_init_func_type ch_init_func;
 typedef int(__stdcall* execute_func_type)();
 execute_func_type execute_func;
+typedef void(__stdcall* periodicExecution_func_type)(BOOL active);
+periodicExecution_func_type periodicExecution_func;
 
 //Creation of cipher struct (and pointer)
 struct Cipher cipher;
@@ -463,7 +465,7 @@ void main() {
 					challenge_group.id = "Grupo0";
 					challenge_group.challenges = malloc(sizeof(struct Challenge));
 					challenge_group.subkey = malloc(sizeof(struct KeyData));
-					//InitializeCriticalSection(&(challenge_group.subkey->critical_section));
+					InitializeCriticalSection(&(challenge_group.subkey->critical_section));
 					challenge_group.subkey->data = calloc(1000, sizeof(char)); //Alocamos memoria para 1000B porque no conocemos la longitud que va a retornar el challenge
 					//PRINT_HEX(challenge_group.subkey->data, 4);
 
@@ -472,6 +474,12 @@ void main() {
 
 					challenge_group.challenges[0] = &challenge;
 
+					periodicExecution_func = (periodicExecution_func_type)GetProcAddress(challenge_group.challenges[0]->lib_handle, "periodicExecution");
+					if (periodicExecution_func == NULL) {
+						printf("La funcion periodicExecution no está en la DLL\n");
+						if (hLib != NULL) FreeLibrary(hLib);
+						continue;
+					}
 					ch_init_func = (ch_init_func_type)GetProcAddress(challenge_group.challenges[0]->lib_handle, "init");
 					if (ch_init_func == NULL) {
 						printf("La funcion init no está en la DLL\n");
@@ -485,6 +493,7 @@ void main() {
 						continue;
 					}
 					printf("Init y exe cargado y se va a llamar\n");
+					periodicExecution_func(FALSE);
 					result = ch_init_func(&challenge_group, &challenge); //Solo pruebo el init, porque este hace el primer execute
 					printf("Init invocado con exito\n");
 					if (0 != result) {
@@ -505,6 +514,8 @@ void main() {
 						continue;
 					}
 					PRINT_HEX(challenge_group.subkey->data, challenge_group.subkey->size);
+					printf("Challenge validado correctamente\n");
+					//Sleep(60000);
 				}
 				else {
 				printf("There is not a Cipher or ExecuteChallenge function in your DLL.\n");

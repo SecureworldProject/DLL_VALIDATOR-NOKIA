@@ -2,8 +2,8 @@
 	"FileName": "simple_challenge.dll",
 	"Description": "This is a simple challenge that does nothing.",
 	"Props": {
-		"validity_time": 3600,
-		"refresh_time": 3000,
+		"validity_time": 3600000,
+		"refresh_time": 5000,
 		"param1": "texto",
 		"param2": 3
 	},

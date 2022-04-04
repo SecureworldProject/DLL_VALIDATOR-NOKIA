@@ -124,7 +124,7 @@ void size_test(char* ciphered, char* deciphered) {
 
 }
 
-void byte_test(DWORD b_size, char* msg, byte* cip_buf, byte* dec_buf) { //*En vez de coger un char, coger 10 randoms(?)
+void byte_test(DWORD b_size, char* msg, byte* cip_buf, byte* dec_buf) { //***En vez de coger un char, coger 10 randoms(?)
 	char caracter;
 	char caracter_ciphered;
 	char caracter_deciphered;
@@ -214,8 +214,9 @@ int loadPropertiesjson(char* file_name, struct Challenge *ch) {
 BOOL ciph_menu = FALSE;
 BOOL main_menu = FALSE;
 
-char line[SIZE_OF_BUFF] = { 0 };
-char dll[SIZE_OF_BUFF] = { 0 };
+WCHAR line[SIZE_OF_BUFF] = { 0 };
+WCHAR json[SIZE_OF_BUFF] = { 0 };
+WCHAR dll[SIZE_OF_BUFF] = { 0 };
 int result;
 size_t tam;
 size_t tam_test;
@@ -230,7 +231,7 @@ typedef int(__stdcall* ch_init_func_type)(struct ChallengeEquivalenceGroup*, str
 ch_init_func_type ch_init_func;
 typedef int(__stdcall* execute_func_type)();
 execute_func_type execute_func;
-typedef void(__stdcall* periodicExecution_func_type)(BOOL active);
+typedef void(__stdcall* periodicExecution_func_type)(BOOL);
 periodicExecution_func_type periodicExecution_func;
 
 //Creation of cipher struct (and pointer)
@@ -263,7 +264,7 @@ void main() {
 			printf("Good bye!\n");
 			break;
 		}
-		else if (1 == swscanf(line, L"%ls", dll)) {
+		else if (1 == swscanf(line, L"%ws", dll)) {
 			//Check DLL file and load if possible
 			HINSTANCE hLib;
 			hLib = LoadLibraryW(dll);
@@ -330,7 +331,7 @@ void main() {
 					byte* ciphered_buf_test = malloc(buf_size_test * sizeof(byte));
 					byte* deciphered_buf_test = malloc(buf_size_test * sizeof(byte));
 
-					//Cipher and decipher source buffers for testing
+					//CIPHERING
 						
 					//Ciphering smaller buffer (original -> cipher)
 					result = cipher_func(ciphered_buf_test, message_test, buf_size_test, offset, composed_key);
@@ -344,12 +345,12 @@ void main() {
 						PRINT("WARNING: error ciphering '%ws' (error: %d)\n", dll, GetLastError()); ///*** Especificar error si es posible
 					}
 					
-					//Deciphering
+					//DECIPHERING
 					decipher_func = (cipher_func_type)GetProcAddress(hLib, "decipher");
 					if (decipher_func != NULL) {
-						//Smaller buffer (original -> decipher)
+						//Deciphering smaller buffer (original -> decipher)
 						result = decipher_func(deciphered_buf_test, message_test, buf_size_test, offset, composed_key);
-						//Original buffer (cipher -> decipher)
+						//Deciphering original buffer (cipher -> decipher)
 						result = decipher_func(deciphered_buf, ciphered_buf, buf_size, offset, composed_key);
 						f_deciphered = fopen(file_deciphered, "wb");
 						fwrite(deciphered_buf, 1, tam, f_deciphered);
@@ -396,11 +397,11 @@ void main() {
 													break;
 												case 2:
 													//Checks if the cipher and decipher operations are executed correctly.***
-													//Mostrar 10 bytes random
+													//***Mostrar 10 bytes random
 													byte_test(buf_size, message, ciphered_buf, deciphered_buf);
 													break;
 												case 3:
-													//***PRINT_HEX(ciphered_buf_test,tam_test)
+													PRINT_HEX(ciphered_buf_test,tam_test)
 													printf("Clear text:%s\nFrom clear to ciphered:%s\nFrom clear to deciphered:%s\n", message_test, ciphered_buf_test, deciphered_buf_test);
 													break;
 												case 4:
@@ -430,13 +431,14 @@ void main() {
 								case 2:
 									printf("ROBUSTNESS TEST \n");
 									double elapsed = (end - begin) * 1e-3;
-									printf("Time to complete cipher: %.3f seconds.\n", elapsed);
+									printf("Time to complete cipher: %.3f seconds\n", elapsed);
 									HANDLE handle_aux = CreateFileA(file_ciphered, GENERIC_READ, FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
 									size_t file_size_cip = 0;
 									getFileSize(&file_size_cip, handle_aux, file_ciphered);
 									CloseHandle(handle_aux);
-									printf("Bytes ciphered: %llub.\n", file_size_cip);
-									//***Faltan los bytes/seg
+									printf("Bytes ciphered: %llu bytes\n", file_size_cip);
+									float speed = file_size_cip / elapsed;
+									printf("Ciphered at %.3f bytes/second\n", speed);
 									break;
 								case 0:
 									printf("Main menu... \n");
@@ -455,67 +457,75 @@ void main() {
 				else if (execute_func != NULL) {
 					printf("ExecuteChallenge function exists. %ws is a challenge DLL. \n", dll);
 					printf("Introduce your json parameters file for this challenge.\n");
-					//fgets(line, sizeof(line), stdin);
-					scanf("%s", &line);
-					int resload = loadPropertiesjson(line,&challenge);
-					if (resload != 0) {
-						if (hLib != NULL) FreeLibrary(hLib);
+					fgetws(line, sizeof(line), stdin);
+					if (wcscmp(line, L"0\n") == 0) {
+						printf("Good bye!\n");
 						continue;
 					}
-					challenge_group.id = "Grupo0";
-					challenge_group.challenges = malloc(sizeof(struct Challenge));
-					challenge_group.subkey = malloc(sizeof(struct KeyData));
-					InitializeCriticalSection(&(challenge_group.subkey->critical_section));
-					challenge_group.subkey->data = calloc(1000, sizeof(char)); //Alocamos memoria para 1000B porque no conocemos la longitud que va a retornar el challenge
-					//PRINT_HEX(challenge_group.subkey->data, 4);
+					else if (1 == swscanf(line, L"%ws", json)) {
+						char s_json[SIZE_OF_BUFF] = { 0 };
+						wcstombs(s_json, json, SIZE_OF_BUFF);
+						int resload = loadPropertiesjson(s_json, &challenge);
+						if (resload != 0) {
+							if (hLib != NULL) FreeLibrary(hLib);
+							continue;
+						}
+						challenge_group.id = "Grupo0";
+						challenge_group.challenges = malloc(sizeof(struct Challenge));
+						challenge_group.subkey = malloc(sizeof(struct KeyData));
+						InitializeCriticalSection(&(challenge_group.subkey->critical_section));
+						challenge_group.subkey->data = calloc(1000, sizeof(char)); // We allocate memory for 1000B because the length that the challenge will return it's unkwown.
 
-					challenge.file_name = dll;
-					challenge.lib_handle = hLib;
+						challenge.file_name = dll;
+						challenge.lib_handle = hLib;
 
-					challenge_group.challenges[0] = &challenge;
+						challenge_group.challenges[0] = &challenge;
 
-					periodicExecution_func = (periodicExecution_func_type)GetProcAddress(challenge_group.challenges[0]->lib_handle, "periodicExecution");
-					if (periodicExecution_func == NULL) {
-						printf("La funcion periodicExecution no está en la DLL\n");
-						if (hLib != NULL) FreeLibrary(hLib);
-						continue;
+						periodicExecution_func = (periodicExecution_func_type)GetProcAddress(challenge_group.challenges[0]->lib_handle, "periodicExecution");
+						if (periodicExecution_func == NULL) {
+							printf("La funcion periodicExecution no esta en la DLL\n");
+							if (hLib != NULL) FreeLibrary(hLib);
+							continue;
+						}
+						ch_init_func = (ch_init_func_type)GetProcAddress(challenge_group.challenges[0]->lib_handle, "init");
+						if (ch_init_func == NULL) {
+							printf("La funcion init no está en la DLL\n");
+							if (hLib != NULL) FreeLibrary(hLib);
+							continue;
+						}
+						execute_func = (execute_func_type)GetProcAddress(challenge_group.challenges[0]->lib_handle, "executeChallenge");
+						if (execute_func == NULL) {
+							printf("La funcion execute no está en la DLL\n");
+							if (hLib != NULL) FreeLibrary(hLib);
+							continue;
+						}
+						printf("Init y exe cargado y se va a llamar\n");
+						periodicExecution_func(FALSE);
+						printf("PeriodicExecution ejecutado\n");
+						result = ch_init_func(&challenge_group, &challenge); //Solo pruebo el init, porque este hace el primer execute
+						printf("Init invocado con exito\n");
+						if (0 != result) {
+							printf("Error in init function\n");
+							if (hLib != NULL) FreeLibrary(hLib);
+							continue;
+						}
+						result = execute_func();
+						printf("Execute invocado con exito\n");
+						if (0 != result) {
+							printf("Error in execute function\n");
+							if (hLib != NULL) FreeLibrary(hLib);
+							continue;
+						}
+						if (challenge_group.subkey->size > 1000 || challenge_group.subkey->size <= 0) {
+							printf("Longitud de clave invalida %d.\n", challenge_group.subkey->size);
+							if (hLib != NULL) FreeLibrary(hLib);
+							continue;
+						}
+						PRINT_HEX(challenge_group.subkey->data, challenge_group.subkey->size);
+						printf("Challenge validado correctamente\n");
+						//Sleep(60000);
 					}
-					ch_init_func = (ch_init_func_type)GetProcAddress(challenge_group.challenges[0]->lib_handle, "init");
-					if (ch_init_func == NULL) {
-						printf("La funcion init no está en la DLL\n");
-						if (hLib != NULL) FreeLibrary(hLib);
-						continue;
-					}
-					execute_func = (execute_func_type)GetProcAddress(challenge_group.challenges[0]->lib_handle, "executeChallenge");
-					if (execute_func == NULL) {
-						printf("La funcion execute no está en la DLL\n");
-						if (hLib != NULL) FreeLibrary(hLib);
-						continue;
-					}
-					printf("Init y exe cargado y se va a llamar\n");
-					periodicExecution_func(FALSE);
-					result = ch_init_func(&challenge_group, &challenge); //Solo pruebo el init, porque este hace el primer execute
-					printf("Init invocado con exito\n");
-					if (0 != result) {
-						printf("Error in init function\n");
-						if (hLib != NULL) FreeLibrary(hLib);
-						continue;
-					}
-					result = execute_func();
-					printf("Execute invocado con exito\n");
-					if (0 != result) {
-						printf("Error in execute function\n");
-						if (hLib != NULL) FreeLibrary(hLib);
-						continue;
-					}
-					if (challenge_group.subkey->size > 1000 || challenge_group.subkey->size <= 0) {
-						printf("Longitud de clave invalida %d.\n", challenge_group.subkey->size);
-						if (hLib != NULL) FreeLibrary(hLib);
-						continue;
-					}
-					PRINT_HEX(challenge_group.subkey->data, challenge_group.subkey->size);
-					printf("Challenge validado correctamente\n");
-					//Sleep(60000);
+					
 				}
 				else {
 				printf("There is not a Cipher or ExecuteChallenge function in your DLL.\n");

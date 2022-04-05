@@ -267,7 +267,13 @@ void main() {
 		else if (1 == swscanf(line, L"%ws", dll)) {
 			//Check DLL file and load if possible
 			HINSTANCE hLib;
+			SetErrorMode(0);
 			hLib = LoadLibraryW(dll);
+			//int errorl = GetLastError();
+			//printf("last error: %d", errorl);
+			//hLib 
+			//HANDLE hLib=NULL;
+				//LoadLibraryExW(dll, hLib,DONT_RESOLVE_DLL_REFERENCES);
 			if (hLib != NULL) {
 				printf("DLL loaded. \n");
 				//Look for cipher or executeChallenge functions in the DLL
@@ -481,7 +487,7 @@ void main() {
 
 						challenge_group.challenges[0] = &challenge;
 
-						periodicExecution_func = (periodicExecution_func_type)GetProcAddress(challenge_group.challenges[0]->lib_handle, "periodicExecution");
+						periodicExecution_func = (periodicExecution_func_type)GetProcAddress(challenge_group.challenges[0]->lib_handle, "setPeriodicExecution");
 						if (periodicExecution_func == NULL) {
 							printf("La funcion periodicExecution no esta en la DLL\n");
 							if (hLib != NULL) FreeLibrary(hLib);
@@ -512,7 +518,7 @@ void main() {
 						result = execute_func();
 						printf("Execute invocado con exito\n");
 						if (0 != result) {
-							printf("Error in execute function\n");
+							printf("Error in execute function error:%d \n",result);
 							if (hLib != NULL) FreeLibrary(hLib);
 							continue;
 						}
@@ -532,7 +538,8 @@ void main() {
 				}
 			}
 			else printf("DLL not loaded.\n");	
-			if (hLib != NULL) FreeLibrary(hLib);
+			
+			//if (hLib != NULL) FreeLibrary(hLib);
 		}
 	} while (TRUE);	
 }

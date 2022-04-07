@@ -486,7 +486,7 @@ void main() {
 
 						periodicExecution_func = (periodicExecution_func_type)GetProcAddress(challenge_group.challenges[0]->lib_handle, "setPeriodicExecution");
 						if (periodicExecution_func == NULL) {
-							printf("Function periodicExecution is not in the DLL\n");
+							printf("Function setPeriodicExecution is not in the DLL\n");
 							if (hLib != NULL) FreeLibrary(hLib);
 							continue;
 						}
@@ -504,7 +504,7 @@ void main() {
 						}
 						printf("Init and execute correctly loaded\n");
 						periodicExecution_func(FALSE);
-						printf("PeriodicExecution ejecutado\n");
+						printf("PeriodicExecution successfully invoked\n");
 						result = ch_init_func(&challenge_group, &challenge); //Solo pruebo el init, porque este hace el primer execute
 						printf("Init successfully invoked\n");
 						if (0 != result) {

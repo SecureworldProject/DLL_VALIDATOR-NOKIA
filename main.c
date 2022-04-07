@@ -221,6 +221,9 @@ int result;
 size_t tam;
 size_t tam_test;
 
+typedef int(__stdcall* test_func_type)();
+test_func_type test_func;
+
 typedef int(__stdcall* cipher_init_func_type)(struct Cipher*);
 cipher_init_func_type cipher_init_func;
 typedef int(__stdcall* cipher_func_type)(LPVOID, LPCVOID, DWORD, size_t, struct KeyData*);
@@ -258,10 +261,9 @@ void main() {
 		printf(" |_______________________| \n");
 		printf("\n");
 		//Request DLL file input
-		printf("Introduce DLL name (0 to exit):\n");
+		printf("Enter DLL name (0 to exit):\n");
 		fgetws(line, sizeof(line), stdin);
 		if (wcscmp(line, L"0\n") == 0) {
-			printf("Good bye!\n");
 			break;
 		}
 		else if (1 == swscanf(line, L"%ws", dll)) {
@@ -269,11 +271,7 @@ void main() {
 			HINSTANCE hLib;
 			SetErrorMode(0);
 			hLib = LoadLibraryW(dll);
-			//int errorl = GetLastError();
-			//printf("last error: %d", errorl);
-			//hLib 
-			//HANDLE hLib=NULL;
-				//LoadLibraryExW(dll, hLib,DONT_RESOLVE_DLL_REFERENCES);
+
 			if (hLib != NULL) {
 				printf("DLL loaded. \n");
 				//Look for cipher or executeChallenge functions in the DLL
@@ -282,11 +280,11 @@ void main() {
 
 				//Cipher DLL
 				if (cipher_func != NULL) { //There is a Cipher function...
-					printf("Cipher function exists. %ws is a cipher DLL. \n", dll);
+					printf("%ws is a cipher DLL. \n", dll);
 					cipher.lib_handle = hLib;
 					cipher.file_name = dll;
 					cipher.block_size = 8;
-					cipher.id = dll; //json name
+					cipher.id = dll;
 
 					composed_key = malloc(1 * sizeof(struct KeyData));
 					composed_key->size = 5;
@@ -306,7 +304,6 @@ void main() {
 						PRINT("WARNING: error accessing the address to the init() function of the cipher '%ws' (error: %d)\n", dll, GetLastError());
 					}
 
-					char line[SIZE_OF_BUFF] = { 0 };
 					int choice = 0;
 
 					//Source buffer
@@ -461,11 +458,11 @@ void main() {
 
 				}
 				else if (execute_func != NULL) {
-					printf("ExecuteChallenge function exists. %ws is a challenge DLL. \n", dll);
-					printf("Introduce your json parameters file for this challenge.\n");
+					printf("%ws is a challenge DLL. \n", dll);
+					printf("Enter your json parameters file for this challenge.\n");
 					fgetws(line, sizeof(line), stdin);
 					if (wcscmp(line, L"0\n") == 0) {
-						printf("Good bye!\n");
+						//printf("Good bye!\n");
 						continue;
 					}
 					else if (1 == swscanf(line, L"%ws", json)) {
@@ -489,52 +486,63 @@ void main() {
 
 						periodicExecution_func = (periodicExecution_func_type)GetProcAddress(challenge_group.challenges[0]->lib_handle, "setPeriodicExecution");
 						if (periodicExecution_func == NULL) {
-							printf("La funcion periodicExecution no esta en la DLL\n");
+							printf("Function periodicExecution is not in the DLL\n");
 							if (hLib != NULL) FreeLibrary(hLib);
 							continue;
 						}
 						ch_init_func = (ch_init_func_type)GetProcAddress(challenge_group.challenges[0]->lib_handle, "init");
 						if (ch_init_func == NULL) {
-							printf("La funcion init no está en la DLL\n");
+							printf("Function init is not in the DLL\n");
 							if (hLib != NULL) FreeLibrary(hLib);
 							continue;
 						}
 						execute_func = (execute_func_type)GetProcAddress(challenge_group.challenges[0]->lib_handle, "executeChallenge");
 						if (execute_func == NULL) {
-							printf("La funcion execute no está en la DLL\n");
+							printf("Function execute is not in the DLL\n");
 							if (hLib != NULL) FreeLibrary(hLib);
 							continue;
 						}
-						printf("Init y exe cargado y se va a llamar\n");
+						printf("Init and execute correctly loaded\n");
 						periodicExecution_func(FALSE);
 						printf("PeriodicExecution ejecutado\n");
 						result = ch_init_func(&challenge_group, &challenge); //Solo pruebo el init, porque este hace el primer execute
-						printf("Init invocado con exito\n");
+						printf("Init successfully invoked\n");
 						if (0 != result) {
-							printf("Error in init function\n");
+							printf("Error in init function error:%d \n", result);
 							if (hLib != NULL) FreeLibrary(hLib);
 							continue;
 						}
 						result = execute_func();
-						printf("Execute invocado con exito\n");
+						printf("Execute successfully invoked\n");
 						if (0 != result) {
 							printf("Error in execute function error:%d \n",result);
 							if (hLib != NULL) FreeLibrary(hLib);
 							continue;
 						}
 						if (challenge_group.subkey->size > 1000 || challenge_group.subkey->size <= 0) {
-							printf("Longitud de clave invalida %d.\n", challenge_group.subkey->size);
+							printf("Invalid key length %d\n", challenge_group.subkey->size);
 							if (hLib != NULL) FreeLibrary(hLib);
 							continue;
 						}
 						PRINT_HEX(challenge_group.subkey->data, challenge_group.subkey->size);
-						printf("Challenge validado correctamente\n");
+						printf("Challenge successfully validated\n");
 						//Sleep(60000);
 					}
 					
 				}
 				else {
-				printf("There is not a Cipher or ExecuteChallenge function in your DLL.\n");
+					printf("Your DLL is neither a challenge or a cipher.\n");
+					printf("\nEnter the function from your DLL that you want to test (written exactly as it is in your code).\n");
+					char any_func[SIZE_OF_BUFF] = { 0 };
+					fgets(any_func, SIZE_OF_BUFF, stdin);
+					any_func[strcspn(any_func, "\n")] = 0;
+						test_func = (test_func_type)GetProcAddress(hLib, any_func);
+						if (test_func != NULL) {
+							test_func();
+						}
+						else {
+							PRINT("WARNING: error accessing the address to the %s() function of the dll '%ws' (error: %d)\n", any_func, dll, GetLastError());
+						}	
 				}
 			}
 			else printf("DLL not loaded.\n");	

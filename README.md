@@ -1,7 +1,11 @@
+# Validador de DLLs
+
+## Introducción
 Programa que importa una DLL y comprueba si cumple los requisitos de Securemirror.
 Ayuda a verificar si el cifrador o challenge creado se ejecuta de la manera deseada.
 
-Debe tener la librería challenge_loader_python.dll accesible (en el directorio x64/release o donde se encuentre el ejecutable DLL_validator.exe).
+## Requisitos
+Para hacer funcionar el validador de manera correcta debe tener la librería challenge_loader_python.dll accesible (en el directorio x64/release o donde se encuentre el ejecutable DLL_validator.exe).
 
 Debe tener la librería python3.dll accesible. Se sobreentiende que debe tener instalado python 3.10. 
 Las posibles rutas de instalación de python son:

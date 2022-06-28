@@ -1,0 +1,17 @@
+{
+	"FileName": "challenge_loader_python.dll",
+	"Description": "Loads a python challenge.",
+	"Props": {
+		"module_python":"simple_challenge",
+		"validity_time": 3600,
+		"refresh_time": 3000,
+		"param1": "Texto",
+		"param2": 3
+	},
+	"Requirements": "none"
+}
+
+
+
+
+

@@ -38,9 +38,14 @@ Antes de validar un challenge en C, comprobar que el archivo .dll y todos los ar
 Para validar el challenge en C simplemente tendrás que introducir el nombre de la librería en el validador, como se muestra a continuación:
 
 ### Challenges en Python
-Si tu challenge python usa un módulo instalable, debes copiar la librería python310.dll despues de instalar dicho módulo, ya que por cada instalación la librería python310.dll cambia.
+Si tu challenge python usa un módulo instalable, debes copiar la librería python310.dll despues de instalar dicho módulo, ya que por cada instalación de cualquier nuevo modulo, la librería python310.dll cambia.
+
+Ademas. si tu challenge es intercativo y usa el modulo lock.py, debes tener este modulo en el directorio del mismo ejecutable DLL_validator.exe
+
+Ademas. debes tener el el mismo directorio la DLL llamada "challenge_loader_python.dll"
 
 El módulo python (fichero .py) que contiene tu challenge debe estar en el directorio donde se encuentre el mismo ejecutable (DLL_validator.exe) para que el programa validador pueda encontrarlo.
+
 
 ### Cifradores
 Antes de validar un cifrador, comprobar que el archivo .dll y los archivos a cifrar/descifrar se encuentran en la misma carpeta que el ejecutable.

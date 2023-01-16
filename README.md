@@ -11,7 +11,7 @@ git clone https://github.com/SecureworldProject/DLL_VALIDATOR-NOKIA
 ```
 La carpeta del proyecto debería quedar así:
 
-<img width="444" alt="git1" src="https://user-images.githubusercontent.com/9071577/176383211-f54a51d8-691c-4a13-b039-5a2846249c25.png">
+![image](https://user-images.githubusercontent.com/9071577/212648916-f534dcaa-2003-4e4e-9643-3425cd5dbf58.png)
 
 Ahora ya puede compilar el proyecto. Para evitar problemas, recomendamos hacerlo en modo Realease x64.
 

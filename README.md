@@ -35,7 +35,9 @@ De esta manera evitamos problemas, ya que el programa podría buscar archivos en
 ### Challenges en C
 Antes de validar un challenge en C, comprobar que el archivo .dll y todos los archivos necesarios para la ejecución del mismo se encuentran en la misma carpeta que el ejecutable.
 
-Para validar el challenge en C simplemente tendrás que introducir el nombre de la librería en el validador, como se muestra a continuación:
+Para validar el challenge en C simplemente tendrás que introducir el nombre de la librería en el validador y el arhivo json correspondiente, como se muestra a continuación:
+
+![image](https://user-images.githubusercontent.com/9071577/212648121-1cab15b3-e772-45fd-a85d-d4e469ccba8c.png)
 
 ### Challenges en Python
 Si tu challenge python usa un módulo instalable, debes copiar la librería python310.dll despues de instalar dicho módulo, ya que por cada instalación de cualquier nuevo modulo, la librería python310.dll cambia.
@@ -46,7 +48,16 @@ Ademas. debes tener el el mismo directorio la DLL llamada "challenge_loader_pyth
 
 El módulo python (fichero .py) que contiene tu challenge debe estar en el directorio donde se encuentre el mismo ejecutable (DLL_validator.exe) para que el programa validador pueda encontrarlo.
 
+Ejemplo de validación de un challenge en python:
+
+![image](https://user-images.githubusercontent.com/9071577/212647884-80956db4-fd99-42f4-a2af-17ea2919b3a2.png)
+
 
 ### Cifradores
 Antes de validar un cifrador, comprobar que el archivo .dll y los archivos a cifrar/descifrar se encuentran en la misma carpeta que el ejecutable.
+
+Ejemplo de validación de un cifrador:
+
+![image](https://user-images.githubusercontent.com/9071577/212648672-fab0567d-9e36-494c-95e9-271818a656fb.png)
+
 

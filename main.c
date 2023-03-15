@@ -20,6 +20,9 @@ void size_test(char* ciphered, char* deciphered);
 void byte_test(DWORD b_size, char* msg, byte* cip_buf, byte* dec_buf);
 int loadPropertiesjson(char* json_file, struct Challenge *ch);
 
+
+CRITICAL_SECTION py_critical_section;
+
 DWORD print_hex(char* buf_name, void* buf, int size) {
 	if (ENABLE_PRINTS) {
 		printf("First %d bytes of %s contain:\n", size, buf_name);
@@ -211,6 +214,23 @@ int loadPropertiesjson(char* file_name, struct Challenge *ch) {
 }
 
 
+void initCritSectPyIfNeeded(HMODULE lib_handle) {
+	typedef int(__stdcall* setPyCriticalSection_func_type)(CRITICAL_SECTION*);
+
+	setPyCriticalSection_func_type set_py_critical_section;
+
+	set_py_critical_section = (setPyCriticalSection_func_type)GetProcAddress(lib_handle, "setPyCriticalSection");
+	if (set_py_critical_section != NULL) {
+		PRINT(":::::   INITIALIZING PY CRITICAL SECTION   :::::\n");
+		set_py_critical_section(&py_critical_section);
+	}
+	else {
+		PRINT(":::::   PY CRITICAL SECTION ALREADY INITIALIZED   :::::\n");
+	}
+}
+
+
+
 BOOL ciph_menu = FALSE;
 BOOL main_menu = FALSE;
 
@@ -250,6 +270,8 @@ struct KeyData subkey;
 struct ChallengeEquivalenceGroup challenge_group;
 
 void main() {
+	InitializeCriticalSection(&py_critical_section);
+
 
 	//Main loop
 	do {
@@ -274,6 +296,10 @@ void main() {
 
 			if (hLib != NULL) {
 				printf("DLL loaded. \n");
+
+				// Init py critical section
+				initCritSectPyIfNeeded(hLib);
+
 				//Look for cipher or executeChallenge functions in the DLL
 				cipher_func = (cipher_func_type)GetProcAddress(hLib, "cipher");
 				execute_func = (execute_func_type)GetProcAddress(hLib, "executeChallenge");

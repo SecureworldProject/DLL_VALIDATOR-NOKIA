@@ -1,27 +1,9 @@
-#include <stdio.h>
-#include <Windows.h>
-#include <string.h>
-#include <stdlib.h>
-#include "context.h"
-#include <fileapi.h>
-#include <time.h>
-#include <sysinfoapi.h>
-#include <sys/stat.h>
-#include "json.h"
-#define SIZE_OF_BUFF 500
 
-#define ENABLE_PRINTS 1	
-#define PRINT_HEX(BUF, BUF_SIZE) print_hex(#BUF, BUF, BUF_SIZE);
-#define PRINT_SMATRIX(BUF,BUF_SIZE) print_square_matrix(BUF, BUF_SIZE);
-
-DWORD print_hex(char* buf_name, void* buf, int size);
-DWORD getFileSize(uint64_t* file_size, HANDLE handle, WCHAR* file_path);
-void size_test(char* ciphered, char* deciphered);
-void byte_test(DWORD b_size, char* msg, byte* cip_buf, byte* dec_buf);
-int loadPropertiesjson(char* json_file, struct Challenge *ch);
+#include "main.h"
 
 
-CRITICAL_SECTION py_critical_section;
+
+
 
 DWORD print_hex(char* buf_name, void* buf, int size) {
 	if (ENABLE_PRINTS) {
@@ -214,22 +196,6 @@ int loadPropertiesjson(char* file_name, struct Challenge *ch) {
 }
 
 
-void initCritSectPyIfNeeded(HMODULE lib_handle) {
-	typedef int(__stdcall* setPyCriticalSection_func_type)(CRITICAL_SECTION*);
-
-	setPyCriticalSection_func_type set_py_critical_section;
-
-	set_py_critical_section = (setPyCriticalSection_func_type)GetProcAddress(lib_handle, "setPyCriticalSection");
-	if (set_py_critical_section != NULL) {
-		PRINT(":::::   INITIALIZING PY CRITICAL SECTION   :::::\n");
-		set_py_critical_section(&py_critical_section);
-	}
-	else {
-		PRINT(":::::   PY CRITICAL SECTION ALREADY INITIALIZED   :::::\n");
-	}
-}
-
-
 
 BOOL ciph_menu = FALSE;
 BOOL main_menu = FALSE;
@@ -269,10 +235,17 @@ struct KeyData subkey;
 //Creation of challenge equivalence group struct (amd pointer)
 struct ChallengeEquivalenceGroup challenge_group;
 
-void main() {
-	InitializeCriticalSection(&py_critical_section);
+struct ExecuteChallengeData {
+	CRITICAL_SECTION critical_section;
+	BOOL request_running;
+	struct ChallengeEquivalenceGroup* ch_group;
+	struct Challenge* ch;
+	int result;
+};
+struct ExecuteChallengeData main_thread_ch_exec_data = { 0 };
 
 
+void menuLoop() {
 	//Main loop
 	do {
 		main_menu = FALSE;
@@ -287,8 +260,7 @@ void main() {
 		fgetws(line, sizeof(line), stdin);
 		if (wcscmp(line, L"0\n") == 0) {
 			break;
-		}
-		else if (1 == swscanf(line, L"%ws", dll)) {
+		} else if (1 == swscanf(line, L"%ws", dll)) {
 			//Check DLL file and load if possible
 			HINSTANCE hLib;
 			SetErrorMode(0);
@@ -296,9 +268,6 @@ void main() {
 
 			if (hLib != NULL) {
 				printf("DLL loaded. \n");
-
-				// Init py critical section
-				initCritSectPyIfNeeded(hLib);
 
 				//Look for cipher or executeChallenge functions in the DLL
 				cipher_func = (cipher_func_type)GetProcAddress(hLib, "cipher");
@@ -325,8 +294,7 @@ void main() {
 						if (result != 0) {
 							PRINT("WARNING: error \n");
 						}
-					}
-					else {
+					} else {
 						PRINT("WARNING: error accessing the address to the init() function of the cipher '%ws' (error: %d)\n", dll, GetLastError());
 					}
 
@@ -344,7 +312,7 @@ void main() {
 					//Destination buffers
 					DWORD buf_size = tam;
 					size_t offset = 0;
-							
+
 					char* file_ciphered = "el_quijote_ciphered.txt";
 					FILE* f_ciphered = NULL;
 					byte* ciphered_buf = malloc(buf_size * sizeof(byte));
@@ -361,7 +329,7 @@ void main() {
 					byte* deciphered_buf_test = malloc(buf_size_test * sizeof(byte));
 
 					//CIPHERING
-						
+
 					//Ciphering smaller buffer (original -> cipher)
 					result = cipher_func(ciphered_buf_test, message_test, buf_size_test, offset, composed_key);
 					//Ciphering original buffer (original -> cipher)
@@ -373,7 +341,7 @@ void main() {
 					if (result != 0) {
 						PRINT("WARNING: error ciphering '%ws' (error: %d)\n", dll, GetLastError()); ///*** Especificar error si es posible
 					}
-					
+
 					//DECIPHERING
 					decipher_func = (cipher_func_type)GetProcAddress(hLib, "decipher");
 					if (decipher_func != NULL) {
@@ -386,11 +354,10 @@ void main() {
 						if (result != 0) {
 							PRINT("WARNING: error deciphering '%ws' (error: %d)\n", dll, GetLastError());
 						}
-					}
-					else {
+					} else {
 						PRINT("WARNING: error accessing the address to the decipher() function of the cipher '%s' (error: %d)\n", dll, GetLastError());
 					}
-							
+
 					do {
 						ciph_menu = FALSE;
 						printf("\n\n");
@@ -407,91 +374,89 @@ void main() {
 						if (fgets(line, sizeof(line), stdin)) {
 							if (1 == sscanf(line, "%d", &choice)) {
 								switch (choice) {
-								case 1:
-																														
-									do {
-										printf("\nSelect test to run:\n");
-										printf("  1) Size \n");
-										printf("  2) Byte \n");
-										printf("  3) Cipher not Decipher \n");
-										printf("  4) Decipher is valid \n");
-										printf("  5) Run all tests \n");
-										printf("  0) Back to cipher menu \n");
-										if (fgets(line, sizeof(line), stdin)) {
-											if (1 == sscanf(line, "%d", &choice)) {
-												switch (choice) {
-												case 1:
-													//Checks if the size of ciphered and deciphered files are the same.
-													size_test(file_ciphered, file_deciphered);
-													break;
-												case 2:
-													//Checks if the cipher and decipher operations are executed correctly.***
-													//***Mostrar 10 bytes random
-													byte_test(buf_size, message, ciphered_buf, deciphered_buf);
-													break;
-												case 3:
-													PRINT_HEX(ciphered_buf_test,tam_test)
-													printf("Clear text:%s\nFrom clear to ciphered:%s\nFrom clear to deciphered:%s\n", message_test, ciphered_buf_test, deciphered_buf_test);
-													break;
-												case 4:
-													printf("Text in clear:%s\nFrom clear to deciphered:%s\n", message_test, deciphered_buf_test);
-													break;
-												case 5:
-													printf("Running all tests...\n");
-													size_test(file_ciphered, file_deciphered);
-													byte_test(buf_size, message, ciphered_buf, deciphered_buf);
-													printf("Clear text:%s\nFrom clear to ciphered:%s\nFrom clear to deciphered:%s\n", message_test, ciphered_buf_test, deciphered_buf_test);
-													printf("Text in clear:%s\nFrom clear to deciphered:%s\n", message_test, deciphered_buf_test);
-													break;
-												case 0:
-													printf("Cipher menu... \n");
-													ciph_menu = TRUE;
-													break;
-												default:
-													printf("Invalid option, try again.\n");
-													break;
-												}
-											}
-											
-										}
+									case 1:
 
-									} while (!ciph_menu);
-									break;
-								case 2:
-									printf("ROBUSTNESS TEST \n");
-									double elapsed = (end - begin) * 1e-3;
-									printf("Time to complete cipher: %.3f seconds\n", elapsed);
-									HANDLE handle_aux = CreateFileA(file_ciphered, GENERIC_READ, FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
-									size_t file_size_cip = 0;
-									getFileSize(&file_size_cip, handle_aux, file_ciphered);
-									CloseHandle(handle_aux);
-									printf("Bytes ciphered: %llu bytes\n", file_size_cip);
-									float speed = file_size_cip / elapsed;
-									printf("Ciphered at %.3f bytes/second\n", speed);
-									break;
-								case 0:
-									printf("Main menu... \n");
-									main_menu = TRUE;
-									break;
-								default:
-									printf("Invalid option, try again.\n");
-									break;
+										do {
+											printf("\nSelect test to run:\n");
+											printf("  1) Size \n");
+											printf("  2) Byte \n");
+											printf("  3) Cipher not Decipher \n");
+											printf("  4) Decipher is valid \n");
+											printf("  5) Run all tests \n");
+											printf("  0) Back to cipher menu \n");
+											if (fgets(line, sizeof(line), stdin)) {
+												if (1 == sscanf(line, "%d", &choice)) {
+													switch (choice) {
+														case 1:
+															//Checks if the size of ciphered and deciphered files are the same.
+															size_test(file_ciphered, file_deciphered);
+															break;
+														case 2:
+															//Checks if the cipher and decipher operations are executed correctly.***
+															//***Mostrar 10 bytes random
+															byte_test(buf_size, message, ciphered_buf, deciphered_buf);
+															break;
+														case 3:
+															PRINT_HEX(ciphered_buf_test, tam_test)
+																printf("Clear text:%s\nFrom clear to ciphered:%s\nFrom clear to deciphered:%s\n", message_test, ciphered_buf_test, deciphered_buf_test);
+															break;
+														case 4:
+															printf("Text in clear:%s\nFrom clear to deciphered:%s\n", message_test, deciphered_buf_test);
+															break;
+														case 5:
+															printf("Running all tests...\n");
+															size_test(file_ciphered, file_deciphered);
+															byte_test(buf_size, message, ciphered_buf, deciphered_buf);
+															printf("Clear text:%s\nFrom clear to ciphered:%s\nFrom clear to deciphered:%s\n", message_test, ciphered_buf_test, deciphered_buf_test);
+															printf("Text in clear:%s\nFrom clear to deciphered:%s\n", message_test, deciphered_buf_test);
+															break;
+														case 0:
+															printf("Cipher menu... \n");
+															ciph_menu = TRUE;
+															break;
+														default:
+															printf("Invalid option, try again.\n");
+															break;
+													}
+												}
+
+											}
+
+										} while (!ciph_menu);
+										break;
+									case 2:
+										printf("ROBUSTNESS TEST \n");
+										double elapsed = (end - begin) * 1e-3;
+										printf("Time to complete cipher: %.3f seconds\n", elapsed);
+										HANDLE handle_aux = CreateFileA(file_ciphered, GENERIC_READ, FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+										size_t file_size_cip = 0;
+										getFileSize(&file_size_cip, handle_aux, file_ciphered);
+										CloseHandle(handle_aux);
+										printf("Bytes ciphered: %llu bytes\n", file_size_cip);
+										float speed = file_size_cip / elapsed;
+										printf("Ciphered at %.3f bytes/second\n", speed);
+										break;
+									case 0:
+										printf("Main menu... \n");
+										main_menu = TRUE;
+										break;
+									default:
+										printf("Invalid option, try again.\n");
+										break;
 								}
 							}
 						}
 
 					} while (!main_menu);
 
-				}
-				else if (execute_func != NULL) {
+				} else if (execute_func != NULL) {
 					printf("%ws is a challenge DLL. \n", dll);
 					printf("Enter your json parameters file for this challenge.\n");
 					fgetws(line, sizeof(line), stdin);
 					if (wcscmp(line, L"0\n") == 0) {
 						//printf("Good bye!\n");
 						continue;
-					}
-					else if (1 == swscanf(line, L"%ws", json)) {
+					} else if (1 == swscanf(line, L"%ws", json)) {
 						char s_json[SIZE_OF_BUFF] = { 0 };
 						wcstombs(s_json, json, SIZE_OF_BUFF);
 						int resload = loadPropertiesjson(s_json, &challenge);
@@ -509,6 +474,10 @@ void main() {
 						challenge.lib_handle = hLib;
 
 						challenge_group.challenges[0] = &challenge;
+
+						if (0 != configureExecChFromMain(challenge)) {
+							continue;
+						}
 
 						periodicExecution_func = (periodicExecution_func_type)GetProcAddress(challenge_group.challenges[0]->lib_handle, "setPeriodicExecution");
 						if (periodicExecution_func == NULL) {
@@ -541,7 +510,7 @@ void main() {
 						result = execute_func();
 						printf("Execute successfully invoked\n");
 						if (0 != result) {
-							printf("Error in execute function error:%d \n",result);
+							printf("Error in execute function error:%d \n", result);
 							if (hLib != NULL) FreeLibrary(hLib);
 							continue;
 						}
@@ -554,26 +523,102 @@ void main() {
 						printf("Challenge successfully validated\n");
 						//Sleep(60000);
 					}
-					
-				}
-				else {
+
+				} else {
 					printf("Your DLL is neither a challenge or a cipher.\n");
 					printf("\nEnter the function from your DLL that you want to test (written exactly as it is in your code).\n");
 					char any_func[SIZE_OF_BUFF] = { 0 };
 					fgets(any_func, SIZE_OF_BUFF, stdin);
 					any_func[strcspn(any_func, "\n")] = 0;
-						test_func = (test_func_type)GetProcAddress(hLib, any_func);
-						if (test_func != NULL) {
-							test_func();
-						}
-						else {
-							PRINT("WARNING: error accessing the address to the %s() function of the dll '%ws' (error: %d)\n", any_func, dll, GetLastError());
-						}	
+					test_func = (test_func_type)GetProcAddress(hLib, any_func);
+					if (test_func != NULL) {
+						test_func();
+					} else {
+						PRINT("WARNING: error accessing the address to the %s() function of the dll '%ws' (error: %d)\n", any_func, dll, GetLastError());
+					}
 				}
-			}
-			else printf("DLL not loaded.\n");	
-			
+			} else printf("DLL not loaded.\n");
+
 			//if (hLib != NULL) FreeLibrary(hLib);
 		}
-	} while (TRUE);	
+	} while (TRUE);
+	exit(0);
+}
+
+void challengeExecutorLoop() {
+	typedef int(__stdcall* exec_ch_func_type)();
+
+	exec_ch_func_type exec_ch_func;
+
+	while (TRUE) {
+		if (main_thread_ch_exec_data.request_running) {
+			exec_ch_func = (exec_ch_func_type)GetProcAddress(main_thread_ch_exec_data.ch->lib_handle, "executeChallenge");
+			printf("Main Loop --> exec_ch_func holds now the addr of the func executeChallenge\n");
+			if (exec_ch_func != NULL) {
+				printf("Main Loop --> exec_ch_func is NOT null\n");
+				main_thread_ch_exec_data.result = exec_ch_func();
+				printf("Main Loop --> result of exec_ch_func is %d\n", main_thread_ch_exec_data.result);
+				if (main_thread_ch_exec_data.result != 0) {
+					PRINT("Main Loop --> WARNING: error trying to execute the challenge '%ws'\n", main_thread_ch_exec_data.ch->file_name);
+				} else {
+					// Stop executing more challenges in the group when one is already working
+				}
+			} else {
+				PRINT("Main Loop --> WARNING: error accessing the address to the executeChallenge() function of the challenge '%ws' (error: %d)\n", main_thread_ch_exec_data.ch->file_name, GetLastError());
+			}
+			main_thread_ch_exec_data.request_running = FALSE;
+		}
+		Sleep(10);
+	}
+}
+
+int execChallengeFromMainThread(struct ChallengeEquivalenceGroup* ch_group, struct Challenge* ch) {
+
+	printf("execChallengeFromMainThread --> Entering critical section\n");
+	EnterCriticalSection(&main_thread_ch_exec_data.critical_section);
+	printf("execChallengeFromMainThread --> Entered critical section\n");
+	main_thread_ch_exec_data.ch_group = ch_group;
+	main_thread_ch_exec_data.ch = ch;
+	main_thread_ch_exec_data.request_running = TRUE;
+	printf("execChallengeFromMainThread --> Challenge execution requested\n");
+	while (main_thread_ch_exec_data.request_running) {
+		printf("execChallengeFromMainThread --> Still waiting...\n");
+		Sleep(100);
+	}
+	printf("execChallengeFromMainThread --> Leaving critical section\n");
+	LeaveCriticalSection(&main_thread_ch_exec_data.critical_section);
+
+	printf("execChallengeFromMainThread --> Challenge execution result: %d\n", main_thread_ch_exec_data.result);
+
+	return main_thread_ch_exec_data.result;
+}
+
+int configureExecChFromMain(struct Challenge ch) {
+	typedef int(__stdcall* ExecChFromMain_func_type)(struct ChallengeEquivalenceGroup*, struct Challenge*);
+	typedef void(__stdcall* setExecChFromMain_func_type)(ExecChFromMain_func_type);
+	setExecChFromMain_func_type setExecChFromMain = NULL;
+
+	setExecChFromMain = (ExecChFromMain_func_type)GetProcAddress(ch.lib_handle, "setExecChFromMain");
+	if (NULL == setExecChFromMain) {
+		fprintf(stderr, "ERROR: could not access 'setExecChFromMain()' function inside challenge '%ws'\n", ch.file_name);
+		return -1;
+	}
+	PRINT("Setting pointer to execChallengeFromMainThread inside challenge '%ws'\n", ch.file_name);
+	setExecChFromMain(execChallengeFromMainThread);
+	return 0;
+}
+
+void main() {
+	// Initialize the critical section associated to the challenge executions
+	InitializeCriticalSection(&main_thread_ch_exec_data.critical_section);
+	main_thread_ch_exec_data.ch_group = NULL;
+	main_thread_ch_exec_data.ch = NULL;
+	main_thread_ch_exec_data.request_running = FALSE;
+	main_thread_ch_exec_data.result = 0;
+
+	// Looping thread with the menu
+	CreateThread(NULL, 0, menuLoop, NULL, 0, NULL);
+
+	// Loop to execute challenges when the requests are made
+	challengeExecutorLoop();
 }
